@@ -26,6 +26,8 @@ export default function CropsDashboard() {
     const [searchTerm, setSearchTerm] = useState('');
     const [activeTab, setActiveTab] = useState('overview');
     const [farmerName, setFarmerName] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
     const [newCrop, setNewCrop] = useState({
         name: '',
         type: '',
@@ -33,10 +35,13 @@ export default function CropsDashboard() {
         expectedHarvest: '',
         area: '',
         status: 'growing',
-        notes: ''
+        notes: '',
+        image: null
     });
     
     const navigate = useNavigate();
+    // Updated API URL - adjust this path according to setup
+    const API_BASE_URL = 'http://127.0.0.1:8000/routes/api'; // Laravel development server
 
     useEffect(() => {
         // Load farmer data and crops
@@ -47,63 +52,63 @@ export default function CropsDashboard() {
         loadCropsData();
     }, []);
 
-    const loadCropsData = () => {
-        // Sample crop data - in real app, fetch from API
-        const sampleCrops = [
-            {
-                id: 1,
-                name: "Rice (Boro)",
-                type: "Cereal",
-                plantedDate: "2024-01-15",
-                expectedHarvest: "2024-05-15",
-                area: "2.5 acres",
-                status: "growing",
-                progress: 75,
-                notes: "Good growth, regular watering needed",
-                weather: "favorable",
-                lastUpdate: "2024-03-10"
-            },
-            {
-                id: 2,
-                name: "Wheat",
-                type: "Cereal",
-                plantedDate: "2023-12-01",
-                expectedHarvest: "2024-04-01",
-                area: "1.8 acres",
-                status: "ready",
-                progress: 100,
-                notes: "Ready for harvest",
-                weather: "good",
-                lastUpdate: "2024-03-28"
-            },
-            {
-                id: 3,
-                name: "Potato",
-                type: "Vegetable",
-                plantedDate: "2024-02-10",
-                expectedHarvest: "2024-06-10",
-                area: "1.2 acres",
-                status: "growing",
-                progress: 45,
-                notes: "Need fertilizer application",
-                weather: "moderate",
-                lastUpdate: "2024-03-20"
-            },
-            {
-                id: 4,
-                name: "Tomato",
-                type: "Vegetable",
-                plantedDate: "2024-01-20",
-                expectedHarvest: "2024-04-20",
-                area: "0.8 acres",
-                status: "flowering",
-                progress: 60,
-                notes: "Flowering stage, pest control needed",
-                weather: "favorable",
-                lastUpdate: "2024-03-25"
+    const loadCropsData = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const response = await fetch(`${API_BASE_URL}/getCrops.php`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
             }
-        ];
-        setCrops(sampleCrops);
+            
+            const data = await response.json();
+            console.log('Received data:', data);
+            
+            // Check if data is an array or has error
+            if (Array.isArray(data)) {
+                // Map DB fields to component fields
+                const mappedCrops = data.map(crop => ({
+                    id: crop.id,
+                    name: crop.crops_name,
+                    type: crop.type,
+                    plantedDate: crop.date,
+                    expectedHarvest: crop.date_expected_harvest,
+                    area: crop.amount_planted + ' acres',
+                    status: crop.status,
+                    notes: crop.notes || '',
+                    image: crop.crop_image_url,
+                    progress: calculateProgress(crop.date, crop.date_expected_harvest),
+                    weather: 'favorable', // Static for now
+                    lastUpdate: crop.updated_at || crop.created_at
+                }));
+                setCrops(mappedCrops);
+            } else if (data.success === false) {
+                setError(data.message || 'Failed to load crops');
+            } else {
+                setError('Unexpected response format');
+            }
+        } catch (error) {
+            console.error('Error loading crops:', error);
+            setError('Failed to load crops: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Helper to calculate progress (example)
+    const calculateProgress = (planted, expected) => {
+        const now = new Date();
+        const plantedDate = new Date(planted);
+        const expectedDate = new Date(expected);
+        const total = expectedDate - plantedDate;
+        const elapsed = now - plantedDate;
+        return Math.min(100, Math.max(0, (elapsed / total) * 100));
     };
 
     const getStatusColor = (status) => {
@@ -126,26 +131,63 @@ export default function CropsDashboard() {
         }
     };
 
-    const handleAddCrop = () => {
-        if (newCrop.name && newCrop.type && newCrop.plantedDate) {
-            const crop = {
-                id: Date.now(),
-                ...newCrop,
-                progress: 10,
-                weather: 'favorable',
-                lastUpdate: new Date().toISOString().split('T')[0]
-            };
-            setCrops(prev => [...prev, crop]);
-            setNewCrop({
-                name: '',
-                type: '',
-                plantedDate: '',
-                expectedHarvest: '',
-                area: '',
-                status: 'growing',
-                notes: ''
+    const handleAddCrop = async () => {
+        if (!newCrop.name || !newCrop.type || !newCrop.plantedDate) {
+            setError('Please fill in all required fields (Name, Type, Planted Date)');
+            return;
+        }
+
+        setLoading(true);
+        setError('');
+
+        const formData = new FormData();
+        formData.append('crops_name', newCrop.name);
+        formData.append('type', newCrop.type);
+        formData.append('date', newCrop.plantedDate);
+        formData.append('date_expected_harvest', newCrop.expectedHarvest);
+        formData.append('amount_planted', parseFloat(newCrop.area) || 0);
+        formData.append('status', newCrop.status);
+        formData.append('notes', newCrop.notes);
+        if (newCrop.image) {
+            formData.append('crop_image', newCrop.image);
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/addCrop.php`, {
+                method: 'POST',
+                body: formData
             });
-            setShowAddModal(false);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('Add crop result:', result);
+
+            if (result.success) {
+                // Reset form
+                setNewCrop({
+                    name: '',
+                    type: '',
+                    plantedDate: '',
+                    expectedHarvest: '',
+                    area: '',
+                    status: 'growing',
+                    notes: '',
+                    image: null
+                });
+                setShowAddModal(false);
+                loadCropsData(); // Reload crops data
+                setError(''); // Clear any previous errors
+            } else {
+                setError(result.message || 'Failed to add crop');
+            }
+        } catch (error) {
+            console.error('Error adding crop:', error);
+            setError('Error adding crop: ' + error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -170,8 +212,20 @@ export default function CropsDashboard() {
 
     const stats = getCropStats();
 
+    const handleImageChange = (e) => {
+        setNewCrop({...newCrop, image: e.target.files[0]});
+    };
+
     return (
         <Container className="mt-4" style={{ paddingBottom: "100px" }}>
+            {/* Error Alert */}
+            {error && (
+                <Alert variant="danger" dismissible onClose={() => setError('')}>
+                    <Alert.Heading>Error!</Alert.Heading>
+                    <p>{error}</p>
+                </Alert>
+            )}
+
             {/* Header */}
             <Row className="mb-4">
                 <Col>
@@ -194,6 +248,18 @@ export default function CropsDashboard() {
                     </div>
                 </Col>
             </Row>
+
+            {/* Loading Indicator */}
+            {loading && (
+                <Alert variant="info">
+                    <div className="d-flex align-items-center">
+                        <div className="spinner-border spinner-border-sm me-2" role="status">
+                            <span className="visually-hidden">Loading...</span>
+                        </div>
+                        Loading...
+                    </div>
+                </Alert>
+            )}
 
             {/* Stats Cards */}
             <Row className="mb-4">
@@ -279,6 +345,7 @@ export default function CropsDashboard() {
                                             variant="outline-success" 
                                             className="w-100 py-3"
                                             onClick={() => setShowAddModal(true)}
+                                            disabled={loading}
                                         >
                                             <div>
                                                 <div style={{ fontSize: '2rem' }}>➕</div>
@@ -344,6 +411,7 @@ export default function CropsDashboard() {
                                         variant="success" 
                                         className="w-100"
                                         onClick={() => setShowAddModal(true)}
+                                        disabled={loading}
                                     >
                                         ➕ Add Crop
                                     </Button>
@@ -353,6 +421,7 @@ export default function CropsDashboard() {
                                         variant="outline-secondary" 
                                         className="w-100"
                                         onClick={loadCropsData}
+                                        disabled={loading}
                                     >
                                         🔄 Refresh
                                     </Button>
@@ -365,8 +434,8 @@ export default function CropsDashboard() {
                                     <Col md={6} lg={4} key={crop.id} className="mb-3">
                                         <Card className="h-100 shadow-sm crop-card" 
                                               style={{ cursor: 'pointer', transition: 'transform 0.2s' }}
-                                              onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-                                              onMouseLeave={(e) => e.target.style.transform = 'translateY(0px)'}
+                                              onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                              onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0px)'}
                                               onClick={() => {
                                                   setSelectedCrop(crop);
                                                   setShowDetailsModal(true);
@@ -381,6 +450,17 @@ export default function CropsDashboard() {
                                                 </div>
                                             </Card.Header>
                                             <Card.Body>
+                                                {crop.image && (
+                                                    <img 
+                                                        src={crop.image} 
+                                                        alt={crop.name} 
+                                                        className="img-fluid mb-2 w-100" 
+                                                        style={{ maxHeight: '150px', objectFit: 'cover', borderRadius: '4px' }} 
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                        }}
+                                                    />
+                                                )}
                                                 <p className="text-muted mb-2">
                                                     <small>📍 {crop.type} • 🏞️ {crop.area}</small>
                                                 </p>
@@ -392,7 +472,7 @@ export default function CropsDashboard() {
                                                         className="mb-1"
                                                         style={{ height: '8px' }}
                                                     />
-                                                    <small className="text-muted">{crop.progress}% Complete</small>
+                                                    <small className="text-muted">{Math.round(crop.progress)}% Complete</small>
                                                 </div>
                                                 <p className="mb-1">
                                                     <small>🌱 Planted: {new Date(crop.plantedDate).toLocaleDateString()}</small>
@@ -406,10 +486,24 @@ export default function CropsDashboard() {
                                 ))}
                             </Row>
 
-                            {filteredCrops.length === 0 && (
+                            {filteredCrops.length === 0 && !loading && (
                                 <div className="text-center py-5">
                                     <h4 className="text-muted">🔍 No crops found</h4>
-                                    <p className="text-muted">Try adjusting your search or filter criteria.</p>
+                                    <p className="text-muted">
+                                        {crops.length === 0 ? 
+                                            'Start by adding your first crop!' : 
+                                            'Try adjusting your search or filter criteria.'
+                                        }
+                                    </p>
+                                    {crops.length === 0 && (
+                                        <Button 
+                                            variant="success" 
+                                            onClick={() => setShowAddModal(true)}
+                                            disabled={loading}
+                                        >
+                                            ➕ Add Your First Crop
+                                        </Button>
+                                    )}
                                 </div>
                             )}
                         </>
@@ -430,7 +524,7 @@ export default function CropsDashboard() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {crops.map(crop => (
+                                            {crops.length > 0 ? crops.map(crop => (
                                                 <tr key={`harvest-${crop.id}`}>
                                                     <td>{new Date(crop.expectedHarvest).toLocaleDateString()}</td>
                                                     <td>{crop.name}</td>
@@ -441,7 +535,13 @@ export default function CropsDashboard() {
                                                         </Badge>
                                                     </td>
                                                 </tr>
-                                            ))}
+                                            )) : (
+                                                <tr>
+                                                    <td colSpan="4" className="text-center text-muted">
+                                                        No crops scheduled yet
+                                                    </td>
+                                                </tr>
+                                            )}
                                         </tbody>
                                     </Table>
                                 </Col>
@@ -478,25 +578,32 @@ export default function CropsDashboard() {
                     <Modal.Title>🌱 Add New Crop</Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
+                    {error && (
+                        <Alert variant="danger" className="mb-3">
+                            {error}
+                        </Alert>
+                    )}
                     <Form>
                         <Row>
                             <Col md={6}>
                                 <Form.Group className="mb-3">
-                                    <Form.Label>Crop Name</Form.Label>
+                                    <Form.Label>Crop Name *</Form.Label>
                                     <Form.Control
                                         type="text"
                                         placeholder="e.g., Rice, Wheat, Potato"
                                         value={newCrop.name}
                                         onChange={(e) => setNewCrop({...newCrop, name: e.target.value})}
+                                        required
                                     />
                                 </Form.Group>
                             </Col>
                             <Col md={6}>
                                 <Form.Group className="mb-3">
-                                    <Form.Label>Crop Type</Form.Label>
+                                    <Form.Label>Crop Type *</Form.Label>
                                     <Form.Select
                                         value={newCrop.type}
                                         onChange={(e) => setNewCrop({...newCrop, type: e.target.value})}
+                                        required
                                     >
                                         <option value="">Select Type</option>
                                         <option value="Cereal">Cereal</option>
@@ -511,11 +618,12 @@ export default function CropsDashboard() {
                         <Row>
                             <Col md={6}>
                                 <Form.Group className="mb-3">
-                                    <Form.Label>Planted Date</Form.Label>
+                                    <Form.Label>Planted Date *</Form.Label>
                                     <Form.Control
                                         type="date"
                                         value={newCrop.plantedDate}
                                         onChange={(e) => setNewCrop({...newCrop, plantedDate: e.target.value})}
+                                        required
                                     />
                                 </Form.Group>
                             </Col>
@@ -539,7 +647,7 @@ export default function CropsDashboard() {
                                         step="0.1"
                                         placeholder="e.g., 2.5"
                                         value={newCrop.area}
-                                        onChange={(e) => setNewCrop({...newCrop, area: e.target.value + ' acres'})}
+                                        onChange={(e) => setNewCrop({...newCrop, area: e.target.value})}
                                     />
                                 </Form.Group>
                             </Col>
@@ -558,6 +666,17 @@ export default function CropsDashboard() {
                             </Col>
                         </Row>
                         <Form.Group className="mb-3">
+                            <Form.Label>Upload Crop Image</Form.Label>
+                            <Form.Control
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageChange}
+                            />
+                            <Form.Text className="text-muted">
+                                Supported formats: JPG, JPEG, PNG, GIF (Max 5MB)
+                            </Form.Text>
+                        </Form.Group>
+                        <Form.Group className="mb-3">
                             <Form.Label>Notes</Form.Label>
                             <Form.Control
                                 as="textarea"
@@ -570,11 +689,18 @@ export default function CropsDashboard() {
                     </Form>
                 </Modal.Body>
                 <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowAddModal(false)}>
+                    <Button variant="secondary" onClick={() => setShowAddModal(false)} disabled={loading}>
                         Cancel
                     </Button>
-                    <Button variant="success" onClick={handleAddCrop}>
-                        🌱 Add Crop
+                    <Button variant="success" onClick={handleAddCrop} disabled={loading}>
+                        {loading ? (
+                            <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                                Adding...
+                            </>
+                        ) : (
+                            '🌱 Add Crop'
+                        )}
                     </Button>
                 </Modal.Footer>
             </Modal>
@@ -624,13 +750,28 @@ export default function CropsDashboard() {
                                 </Col>
                                 <Col md={4}>
                                     <div className="text-center">
-                                        <div style={{ fontSize: '4rem' }}>🌾</div>
+                                        {selectedCrop.image ? (
+                                            <img 
+                                                src={selectedCrop.image} 
+                                                alt={selectedCrop.name} 
+                                                className="img-fluid mb-2" 
+                                                style={{ maxHeight: '200px', objectFit: 'cover', borderRadius: '8px' }} 
+                                                onError={(e) => {
+                                                    e.target.src = '';
+                                                    e.target.style.display = 'none';
+                                                    e.target.nextSibling.style.display = 'block';
+                                                }}
+                                            />
+                                        ) : (
+                                            <div style={{ fontSize: '4rem' }}>🌾</div>
+                                        )}
+                                        <div style={{ fontSize: '4rem', display: 'none' }}>🌾</div>
                                         <ProgressBar 
                                             now={selectedCrop.progress} 
                                             variant={getStatusColor(selectedCrop.status)}
                                             className="mb-2"
                                         />
-                                        <small>{selectedCrop.progress}% Complete</small>
+                                        <small>{Math.round(selectedCrop.progress)}% Complete</small>
                                     </div>
                                 </Col>
                             </Row>

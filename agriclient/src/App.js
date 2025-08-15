@@ -15,6 +15,14 @@ import FarmerDashboard from "./components/FarmerDashboard/FarmerDashboard";
 import MarketDashboard from "./components/FarmerDashboard/MarketDashboard";
 import CropsDashboard from "./components/FarmerDashboard/CropsDashboard";
 import ReportDashboard from "./components/FarmerDashboard/ReportDashboard";
+import MarketplaceDashboard from "./components/marketplace/MarketplaceDashboard";
+import SeedsFertilizersDashboard from './components/seedFertilizer/SeedsFertilizersDashboard'; 
+import FinancialAssistanceDashboard from './components/financial/FinancialAssistanceDashboard';
+import EquipmentSharingDashboard from './components/equipment/EquipmentSharingDashboard';
+import BuyerDashboard from "./components/buyerdashboard/buyerdashboard"; 
+
+
+
 
 
 import "bootstrap/dist/css/bootstrap.min.css"; // ✅ Bootstrap CSS ইমপোর্ট করা হয়েছে
@@ -57,9 +65,21 @@ function App() {
        {/* ✅ Market Dashboard Pages */} 
        <Route path="/dashboard/market" element={<MarketDashboard />} />
 
+       {/* ✅ Farmer to buyer marketplace Pages */} 
+       <Route path="/marketplace" element={<MarketplaceDashboard />} />
 
+       {/* ✅ Seed and Fertilizer Dashboard Pages */} 
+       <Route path="/seeds-fertilizer" element={<SeedsFertilizersDashboard />} /> 
 
-    
+       {/* ✅Financial Assistance */} 
+       <Route path="/financial-assistance" element={<FinancialAssistanceDashboard />} />
+
+       {/* ✅Equipment sharing */} 
+       <Route path="/equipment-sharing" element={<EquipmentSharingDashboard />} />
+
+       {/* ✅Buyer Dashboard */}
+       <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
+
        </Routes>
       <Footer />
     </Router>

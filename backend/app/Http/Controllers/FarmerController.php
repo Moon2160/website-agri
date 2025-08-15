@@ -66,3 +66,6 @@ class FarmerController extends Controller
         }
     }
 }
+
+//get farmer data
+
